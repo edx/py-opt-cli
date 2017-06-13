@@ -310,7 +310,7 @@ def cli(ctx, token):
 @cli.command()
 @click.option('--root', default='.', type=click.Path(exists=True, file_okay=False))
 @click.pass_context
-def pull_all(ctx, root):
+def pull(ctx, root):
     optimizely = ctx.obj['OPTIMIZELY']
     project_root = Path(root)
     for project in optimizely.projects:
