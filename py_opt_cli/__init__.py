@@ -158,6 +158,9 @@ class Change():
         elif meta['type'] == 'custom_code':
             with (change_dir / 'value.js').open() as value_file:
                 meta['value'] = value_file.read()
+        elif meta['type'] == 'insert_html':
+            with (change_dir / 'value.html').open() as value_file:
+                meta['value'] = value_file.read()
 
         return cls(meta)
 
@@ -174,6 +177,10 @@ class Change():
         elif self.document['type'] == 'custom_code':
             contents = meta.pop('value')
             with (change_root / 'value.js').open('w') as value_file:
+                value_file.write(contents)
+        elif self.document['type'] == 'insert_html':
+            contents = meta.pop('value')
+            with (change_root / 'value.html').open('w') as value_file:
                 value_file.write(contents)
 
         write_meta_file(change_root, meta)
