@@ -58,7 +58,7 @@ class Project():
 
     @property
     def dirname(self):
-        return "{} - {}".format(self.document['name'], self.document['id'])
+        return slugify("{} {}".format(self.document['name'], self.document['id']))
 
     @classmethod
     def read_from_disk(cls, project_dir):
@@ -79,7 +79,7 @@ class Experiment():
 
     @property
     def dirname(self):
-        return "{} - {}".format(self.document.get('name'), self.document['id'])
+        return slugify("{} {}".format(self.document.get('name'), self.document['id']))
 
     @classmethod
     def read_from_disk(cls, experiment_dir):
@@ -146,7 +146,7 @@ class Change():
 
     @property
     def dirname(self):
-        return self.document['id']
+        return slugify(self.document['id'])
 
     @classmethod
     def read_from_disk(cls, change_dir):
@@ -192,7 +192,7 @@ class Variation():
 
     @property
     def dirname(self):
-        return "{} - {}".format(self.document.get('name'), self.document['variation_id'])
+        return slugify("{} {}".format(self.document.get('name'), self.document['variation_id']))
 
     @classmethod
     def read_from_disk(cls, variation_dir):
@@ -237,7 +237,7 @@ class Action():
 
     @property
     def dirname(self):
-        return str(self.document['page_id'])
+        return slugify(str(self.document['page_id']))
 
     @classmethod
     def read_from_disk(cls, action_dir):
@@ -303,6 +303,10 @@ def filter_modifiable_experiment_keys(experiment):
             del filtered[key]
 
     return filtered
+
+
+def slugify(directory):
+    return directory.replace(' ', '_')
 
 
 @click.group()
