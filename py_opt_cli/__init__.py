@@ -1,4 +1,5 @@
 import requests
+from requests.exceptions import HTTPError
 import attr
 import yaml
 import click
@@ -16,6 +17,10 @@ class Optimizely():
         self.session = requests.Session()
         self.session.headers['Authorization'] = "Bearer {}".format(token)
 
+    def raise_for_status(self, response):
+        if not response.ok:
+            raise HTTPError(response.json().get('message', response.reason), response=response)
+
     @property
     def projects(self):
         response = self.session.get('https://api.optimizely.com/v2/projects')
@@ -31,6 +36,7 @@ class Optimizely():
                 'per_page': 100,
             }
         )
+        self.raise_for_status(response)
         while True:
             for experiment in response.json():
                 yield Experiment(experiment)
@@ -41,15 +47,18 @@ class Optimizely():
                 return
 
     def experiment(self, experiment_id):
-        return Experiment(self.session.get(
+        response = self.session.get(
             'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
-        ).json())
+        )
+        self.raise_for_status(response)
+        return Experiment(response.json())
 
     def update_experiment(self, experiment_id, changes):
-        self.session.patch(
+        response = self.session.patch(
             'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
             json=changes,
         )
+        self.raise_for_status(response)
 
 
 @attr.s
