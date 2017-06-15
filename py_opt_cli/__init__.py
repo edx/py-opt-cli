@@ -26,7 +26,7 @@ class Optimizely():
         response = self.session.get('https://api.optimizely.com/v2/projects')
         projects = response.json()
         for project in projects:
-            yield Project(project)
+            yield Project(**project)
 
     def experiments(self, project_id):
         response = self.session.get(
@@ -61,25 +61,40 @@ class Optimizely():
         self.raise_for_status(response)
 
 
+
+
+
 @attr.s
 class Project():
-    document = attr.ib(convert=dict)
+    name = attr.ib()
+    confidence_threshold = attr.ib()
+    platform = attr.ib()
+    sdks = attr.ib()
+    status = attr.ib()
+    web_snippet = attr.ib()
+    account_id = attr.ib()
+    created = attr.ib()
+    id = attr.ib()
+    is_classic = attr.ib()
+    last_modified = attr.ib()
+    socket_token = attr.ib(default=None)
+    dcp_service_id = attr.ib(default=None)
 
     @property
     def dirname(self):
-        return slugify("{} {}".format(self.document['name'], self.document['id']))
+        return slugify("{} {}".format(self.name, self.id))
 
     @classmethod
     def read_from_disk(cls, project_dir):
         meta = read_meta_file(project_dir)
 
-        return cls(meta)
+        return cls(**meta)
 
     def write_to_disk(self, root):
         project_root = root / self.dirname
         project_root.mkdir(parents=True, exist_ok=True)
 
-        write_meta_file(project_root, self.document)
+        write_meta_file(project_root, attr.asdict(self))
 
 
 @attr.s
@@ -290,7 +305,7 @@ def write_meta_file(root, meta_document):
 
     with meta_file.open('w') as meta_file_handle:
         yaml.safe_dump(
-            meta_document,
+            {k: v for k, v in meta_document.items() if v is not None},
             stream=meta_file_handle,
             default_flow_style=False,
         )
@@ -337,7 +352,7 @@ def pull(ctx, root):
         project.write_to_disk(project_root)
 
         experiment_root = project_root / project.dirname / 'experiments'
-        for experiment in optimizely.experiments(project.document['id']):
+        for experiment in optimizely.experiments(project.id):
             experiment.write_to_disk(experiment_root)
 
 
