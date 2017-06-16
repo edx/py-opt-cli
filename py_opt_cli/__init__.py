@@ -39,7 +39,7 @@ class Optimizely():
         self.raise_for_status(response)
         while True:
             for experiment in response.json():
-                yield Experiment(experiment)
+                yield Experiment(**experiment)
 
             if 'LINK' in response.headers:
                 print(response.headers['LINK'])
@@ -51,7 +51,7 @@ class Optimizely():
             'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
         )
         self.raise_for_status(response)
-        return Experiment(response.json())
+        return Experiment(**response.json())
 
     def update_experiment(self, experiment_id, changes):
         response = self.session.patch(
@@ -94,16 +94,34 @@ class Project():
         project_root = root / self.dirname
         project_root.mkdir(parents=True, exist_ok=True)
 
-        write_meta_file(project_root, attr.asdict(self))
+        write_meta_file(project_root, as_non_null_dict(self))
 
 
 @attr.s
 class Experiment():
-    document = attr.ib(convert=dict)
+    project_id = attr.ib()
+    variations = attr.ib(convert=lambda vs: [Variation(**v) for v in vs])
+    changes = attr.ib(convert=lambda cs: [Change(**c) for c in cs])
+    metrics = attr.ib()
+    type = attr.ib()
+    created = attr.ib()
+    id = attr.ib()
+    is_classic = attr.ib()
+    last_modified = attr.ib()
+    status = attr.ib()
+    audience_conditions = attr.ib(default=None)
+    earliest = attr.ib(default=None)
+    latest = attr.ib(default=None)
+    schedule = attr.ib(default=None)
+    key = attr.ib(default=None)
+    holdback = attr.ib(default=None)
+    description = attr.ib(default=None)
+    campaign_id = attr.ib(default=None)
+    name = attr.ib(default=None)
 
     @property
     def dirname(self):
-        return slugify("{} {}".format(self.document.get('name'), self.document['id']))
+        return slugify("{} {}".format(self.name, self.id))
 
     @classmethod
     def read_from_disk(cls, experiment_dir):
@@ -117,7 +135,7 @@ class Experiment():
                 if not change_dir.is_dir():
                     continue
                 change = Change.read_from_disk(change_dir)
-                changes.append(change.document)
+                changes.append(as_non_null_dict(change))
         meta['changes'] = changes
 
         variations = []
@@ -128,19 +146,19 @@ class Experiment():
                 if not variation_dir.is_dir():
                     continue
                 variation = Variation.read_from_disk(variation_dir)
-                variations.append(variation.document)
+                variations.append(as_non_null_dict(variation))
         meta['variations'] = variations
 
-        return cls(meta)
+        return cls(**meta)
 
     def write_to_disk(self, root):
         experiment_root = root / self.dirname
         experiment_root.mkdir(parents=True, exist_ok=True)
 
-        meta = dict(self.document)
+        meta = as_non_null_dict(self)
 
         changes = []
-        for change in self.global_changes:
+        for change in self.changes:
             change.write_to_disk(experiment_root / 'changes')
             changes.append(change.dirname)
         meta['changes'] = changes
@@ -153,24 +171,30 @@ class Experiment():
 
         write_meta_file(experiment_root, meta)
 
-    @property
-    def global_changes(self):
-        for change in self.document['changes']:
-            yield Change(change)
-
-    @property
-    def variations(self):
-        for variation in self.document['variations']:
-            yield Variation(variation)
-
 
 @attr.s
 class Change():
-    document = attr.ib(convert=dict)
+    dependencies = attr.ib()
+    id = attr.ib()
+    type = attr.ib()
+    async = attr.ib(default=None)
+    allow_additional_redirect = attr.ib(default=None)
+    attributes = attr.ib(default=None)
+    config = attr.ib(default=None)
+    css = attr.ib(default=None)
+    destination = attr.ib(default=None)
+    extension_id = attr.ib(default=None)
+    name = attr.ib(default=None)
+    operator = attr.ib(default=None)
+    preserve_parameters = attr.ib(default=None)
+    rearrange = attr.ib(default=None)
+    selector = attr.ib(default=None)
+    src = attr.ib(default=None)
+    value = attr.ib(default=None)
 
     @property
     def dirname(self):
-        return slugify(self.document['id'])
+        return slugify(self.id)
 
     @classmethod
     def read_from_disk(cls, change_dir):
@@ -186,23 +210,23 @@ class Change():
             with (change_dir / 'value.html').open() as value_file:
                 meta['value'] = value_file.read()
 
-        return cls(meta)
+        return cls(**meta)
 
     def write_to_disk(self, root):
         change_root = root / self.dirname
         change_root.mkdir(parents=True, exist_ok=True)
 
-        meta = dict(self.document)
+        meta = as_non_null_dict(self)
 
-        if self.document['type'] == 'custom_css':
+        if self.type == 'custom_css':
             contents = meta.pop('value')
             with (change_root / 'value.css').open('w') as value_file:
                 value_file.write(contents)
-        elif self.document['type'] == 'custom_code':
+        elif self.type == 'custom_code':
             contents = meta.pop('value')
             with (change_root / 'value.js').open('w') as value_file:
                 value_file.write(contents)
-        elif self.document['type'] == 'insert_html':
+        elif self.type == 'insert_html':
             contents = meta.pop('value')
             with (change_root / 'value.html').open('w') as value_file:
                 value_file.write(contents)
@@ -212,11 +236,16 @@ class Change():
 
 @attr.s
 class Variation():
-    document = attr.ib(convert=dict)
+    weight = attr.ib()
+    actions = attr.ib(convert=lambda acts: [Action(**a) for a in acts])
+    archived = attr.ib()
+    variation_id = attr.ib()
+    key = attr.ib(default=None)
+    name = attr.ib(default=None)
 
     @property
     def dirname(self):
-        return slugify("{} {}".format(self.document.get('name'), self.document['variation_id']))
+        return slugify("{} {}".format(self.name, self.variation_id))
 
     @classmethod
     def read_from_disk(cls, variation_dir):
@@ -230,16 +259,16 @@ class Variation():
                 if not action_dir.is_dir():
                     continue
                 action = Action.read_from_disk(action_dir)
-                actions.append(action.document)
+                actions.append(as_non_null_dict(action))
         meta['actions'] = actions
 
-        return cls(meta)
+        return cls(**meta)
 
     def write_to_disk(self, root):
         variation_root = root / self.dirname
         variation_root.mkdir(parents=True, exist_ok=True)
 
-        meta = dict(self.document)
+        meta = as_non_null_dict(self)
 
         actions = []
         for action in self.actions:
@@ -249,19 +278,15 @@ class Variation():
 
         write_meta_file(variation_root, meta)
 
-    @property
-    def actions(self):
-        for action in self.document['actions']:
-            yield Action(action)
-
 
 @attr.s
 class Action():
-    document = attr.ib(convert=dict)
+    changes = attr.ib(convert=lambda cs: [Change(**c) for c in cs])
+    page_id = attr.ib()
 
     @property
     def dirname(self):
-        return slugify(str(self.document['page_id']))
+        return slugify(str(self.page_id))
 
     @classmethod
     def read_from_disk(cls, action_dir):
@@ -275,16 +300,16 @@ class Action():
                 if not change_dir.is_dir():
                     continue
                 change = Change.read_from_disk(change_dir)
-                changes.append(change.document)
+                changes.append(as_non_null_dict(change))
         meta['changes'] = changes
 
-        return cls(meta)
+        return cls(**meta)
 
     def write_to_disk(self, root):
         action_root = root / self.dirname
         action_root.mkdir(parents=True, exist_ok=True)
 
-        meta = dict(self.document)
+        meta = as_non_null_dict(self)
 
         changes = []
         for change in self.changes:
@@ -293,11 +318,6 @@ class Action():
         meta['changes'] = changes
 
         write_meta_file(action_root, meta)
-
-    @property
-    def changes(self):
-        for change in self.document['changes']:
-            yield Change(change)
 
 
 def write_meta_file(root, meta_document):
@@ -333,6 +353,10 @@ def slugify(directory):
     return directory.replace(' ', '_')
 
 
+def as_non_null_dict(obj):
+    return attr.asdict(obj, filter=lambda a, v: v is not None)
+
+
 @click.group()
 @click.password_option('--token', envvar='OPTIMIZELY_TOKEN')
 @click.pass_context
@@ -363,7 +387,7 @@ def pull_experiment(ctx, experiment):
     optimizely = ctx.obj['OPTIMIZELY']
 
     local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiment(local.document['id'])
+    remote = optimizely.experiment(local.id)
 
     remote.write_to_disk(Path(experiment).parent)
 
@@ -376,10 +400,10 @@ def push_experiment(ctx, experiment, context_lines):
     optimizely = ctx.obj['OPTIMIZELY']
 
     local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiment(local.document['id'])
+    remote = optimizely.experiment(local.id)
 
-    remote_doc = filter_modifiable_experiment_keys(remote.document)
-    local_doc = filter_modifiable_experiment_keys(local.document)
+    remote_doc = filter_modifiable_experiment_keys(as_non_null_dict(remote))
+    local_doc = filter_modifiable_experiment_keys(as_non_null_dict(local))
 
     if local_doc == remote_doc:
         click.secho("No changes!", fg='green')
@@ -401,7 +425,7 @@ def push_experiment(ctx, experiment, context_lines):
                 click.secho(diffline, fg='yellow')
 
         if click.confirm('Push these experiment changes?'):
-            optimizely.update_experiment(local.document['id'], local_doc)
+            optimizely.update_experiment(local.id, local_doc)
 
 
 if __name__ == '__main__':
