@@ -144,6 +144,9 @@ class OptimizelyDocument():
 
         write_meta_file(docroot, meta)
 
+    @property
+    def dirname(self):
+        return slugify("{} {}".format(self.name, self.id))
 
 @attr.s
 class Project(OptimizelyDocument):
@@ -160,10 +163,6 @@ class Project(OptimizelyDocument):
     last_modified = attr.ib(metadata={READ_ONLY: True})
     socket_token = attr.ib(default=None, metadata={READ_ONLY: True})
     dcp_service_id = attr.ib(default=None)
-
-    @property
-    def dirname(self):
-        return slugify("{} {}".format(self.name, self.id))
 
 
 @attr.s
@@ -274,10 +273,6 @@ class Experiment(OptimizelyDocument):
     latest = attr.ib(default=None, metadata={READ_ONLY: True})
     name = attr.ib(default=None)
     schedule = attr.ib(default=None)
-
-    @property
-    def dirname(self):
-        return slugify("{} {}".format(self.name, self.id))
 
 
 def write_meta_file(root, meta_document):
