@@ -61,9 +61,6 @@ class Optimizely():
         self.raise_for_status(response)
 
 
-
-
-
 @attr.s
 class Project():
     name = attr.ib()
@@ -97,11 +94,163 @@ class Project():
         write_meta_file(project_root, as_non_null_dict(self))
 
 
+def subdocuments(cls):
+    return attr.ib(convert=lambda docs: [cls(**doc) for doc in docs])
+
+
+@attr.s
+class Change():
+    dependencies = attr.ib()
+    id = attr.ib()
+    type = attr.ib()
+    async = attr.ib(default=None)
+    allow_additional_redirect = attr.ib(default=None)
+    attributes = attr.ib(default=None)
+    config = attr.ib(default=None)
+    css = attr.ib(default=None)
+    destination = attr.ib(default=None)
+    extension_id = attr.ib(default=None)
+    name = attr.ib(default=None)
+    operator = attr.ib(default=None)
+    preserve_parameters = attr.ib(default=None)
+    rearrange = attr.ib(default=None)
+    selector = attr.ib(default=None)
+    src = attr.ib(default=None)
+    value = attr.ib(default=None)
+
+    @property
+    def dirname(self):
+        return slugify(self.id)
+
+    @classmethod
+    def read_from_disk(cls, change_dir):
+        meta = read_meta_file(change_dir)
+
+        if meta['type'] == 'custom_css':
+            with (change_dir / 'value.css').open() as value_file:
+                meta['value'] = value_file.read()
+        elif meta['type'] == 'custom_code':
+            with (change_dir / 'value.js').open() as value_file:
+                meta['value'] = value_file.read()
+        elif meta['type'] == 'insert_html':
+            with (change_dir / 'value.html').open() as value_file:
+                meta['value'] = value_file.read()
+
+        return cls(**meta)
+
+    def write_to_disk(self, root):
+        change_root = root / self.dirname
+        change_root.mkdir(parents=True, exist_ok=True)
+
+        meta = as_non_null_dict(self)
+
+        if self.type == 'custom_css':
+            contents = meta.pop('value')
+            with (change_root / 'value.css').open('w') as value_file:
+                value_file.write(contents)
+        elif self.type == 'custom_code':
+            contents = meta.pop('value')
+            with (change_root / 'value.js').open('w') as value_file:
+                value_file.write(contents)
+        elif self.type == 'insert_html':
+            contents = meta.pop('value')
+            with (change_root / 'value.html').open('w') as value_file:
+                value_file.write(contents)
+
+        write_meta_file(change_root, meta)
+
+
+@attr.s
+class Action():
+    changes = subdocuments(Change)
+    page_id = attr.ib()
+
+    @property
+    def dirname(self):
+        return slugify(str(self.page_id))
+
+    @classmethod
+    def read_from_disk(cls, action_dir):
+        meta = read_meta_file(action_dir)
+
+        changes = []
+        changes_dir = action_dir / 'changes'
+        if changes_dir.exists():
+            for dirname in meta.get('changes'):
+                change_dir = changes_dir / dirname
+                if not change_dir.is_dir():
+                    continue
+                change = Change.read_from_disk(change_dir)
+                changes.append(as_non_null_dict(change))
+        meta['changes'] = changes
+
+        return cls(**meta)
+
+    def write_to_disk(self, root):
+        action_root = root / self.dirname
+        action_root.mkdir(parents=True, exist_ok=True)
+
+        meta = as_non_null_dict(self)
+
+        changes = []
+        for change in self.changes:
+            change.write_to_disk(action_root / 'changes')
+            changes.append(change.dirname)
+        meta['changes'] = changes
+
+        write_meta_file(action_root, meta)
+
+
+@attr.s
+class Variation():
+    weight = attr.ib()
+    actions = subdocuments(Action)
+    archived = attr.ib()
+    variation_id = attr.ib()
+    key = attr.ib(default=None)
+    name = attr.ib(default=None)
+
+    @property
+    def dirname(self):
+        return slugify("{} {}".format(self.name, self.variation_id))
+
+    @classmethod
+    def read_from_disk(cls, variation_dir):
+        meta = read_meta_file(variation_dir)
+
+        actions = []
+        actions_dir = variation_dir / 'actions'
+        if actions_dir.exists():
+            for dirname in meta['actions']:
+                action_dir = actions_dir / dirname
+                if not action_dir.is_dir():
+                    continue
+                action = Action.read_from_disk(action_dir)
+                actions.append(as_non_null_dict(action))
+        meta['actions'] = actions
+
+        return cls(**meta)
+
+    def write_to_disk(self, root):
+        variation_root = root / self.dirname
+        variation_root.mkdir(parents=True, exist_ok=True)
+
+        meta = as_non_null_dict(self)
+
+        actions = []
+        for action in self.actions:
+            action.write_to_disk(variation_root / 'actions')
+            actions.append(action.dirname)
+        meta['actions'] = actions
+
+        write_meta_file(variation_root, meta)
+
+
 @attr.s
 class Experiment():
     project_id = attr.ib()
-    variations = attr.ib(convert=lambda vs: [Variation(**v) for v in vs])
-    changes = attr.ib(convert=lambda cs: [Change(**c) for c in cs])
+    variations = subdocuments(Variation)
+    changes = subdocuments(Change)
     metrics = attr.ib()
     type = attr.ib()
     created = attr.ib()
@@ -170,154 +319,6 @@ class Experiment():
         meta['variations'] = variations
 
         write_meta_file(experiment_root, meta)
-
-
-@attr.s
-class Change():
-    dependencies = attr.ib()
-    id = attr.ib()
-    type = attr.ib()
-    async = attr.ib(default=None)
-    allow_additional_redirect = attr.ib(default=None)
-    attributes = attr.ib(default=None)
-    config = attr.ib(default=None)
-    css = attr.ib(default=None)
-    destination = attr.ib(default=None)
-    extension_id = attr.ib(default=None)
-    name = attr.ib(default=None)
-    operator = attr.ib(default=None)
-    preserve_parameters = attr.ib(default=None)
-    rearrange = attr.ib(default=None)
-    selector = attr.ib(default=None)
-    src = attr.ib(default=None)
-    value = attr.ib(default=None)
-
-    @property
-    def dirname(self):
-        return slugify(self.id)
-
-    @classmethod
-    def read_from_disk(cls, change_dir):
-        meta = read_meta_file(change_dir)
-
-        if meta['type'] == 'custom_css':
-            with (change_dir / 'value.css').open() as value_file:
-                meta['value'] = value_file.read()
-        elif meta['type'] == 'custom_code':
-            with (change_dir / 'value.js').open() as value_file:
-                meta['value'] = value_file.read()
-        elif meta['type'] == 'insert_html':
-            with (change_dir / 'value.html').open() as value_file:
-                meta['value'] = value_file.read()
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        change_root = root / self.dirname
-        change_root.mkdir(parents=True, exist_ok=True)
-
-        meta = as_non_null_dict(self)
-
-        if self.type == 'custom_css':
-            contents = meta.pop('value')
-            with (change_root / 'value.css').open('w') as value_file:
-                value_file.write(contents)
-        elif self.type == 'custom_code':
-            contents = meta.pop('value')
-            with (change_root / 'value.js').open('w') as value_file:
-                value_file.write(contents)
-        elif self.type == 'insert_html':
-            contents = meta.pop('value')
-            with (change_root / 'value.html').open('w') as value_file:
-                value_file.write(contents)
-
-        write_meta_file(change_root, meta)
-
-
-@attr.s
-class Variation():
-    weight = attr.ib()
-    actions = attr.ib(convert=lambda acts: [Action(**a) for a in acts])
-    archived = attr.ib()
-    variation_id = attr.ib()
-    key = attr.ib(default=None)
-    name = attr.ib(default=None)
-
-    @property
-    def dirname(self):
-        return slugify("{} {}".format(self.name, self.variation_id))
-
-    @classmethod
-    def read_from_disk(cls, variation_dir):
-        meta = read_meta_file(variation_dir)
-
-        actions = []
-        actions_dir = variation_dir / 'actions'
-        if actions_dir.exists():
-            for dirname in meta['actions']:
-                action_dir = actions_dir / dirname
-                if not action_dir.is_dir():
-                    continue
-                action = Action.read_from_disk(action_dir)
-                actions.append(as_non_null_dict(action))
-        meta['actions'] = actions
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        variation_root = root / self.dirname
-        variation_root.mkdir(parents=True, exist_ok=True)
-
-        meta = as_non_null_dict(self)
-
-        actions = []
-        for action in self.actions:
-            action.write_to_disk(variation_root / 'actions')
-            actions.append(action.dirname)
-        meta['actions'] = actions
-
-        write_meta_file(variation_root, meta)
-
-
-@attr.s
-class Action():
-    changes = attr.ib(convert=lambda cs: [Change(**c) for c in cs])
-    page_id = attr.ib()
-
-    @property
-    def dirname(self):
-        return slugify(str(self.page_id))
-
-    @classmethod
-    def read_from_disk(cls, action_dir):
-        meta = read_meta_file(action_dir)
-
-        changes = []
-        changes_dir = action_dir / 'changes'
-        if changes_dir.exists():
-            for dirname in meta.get('changes'):
-                change_dir = changes_dir / dirname
-                if not change_dir.is_dir():
-                    continue
-                change = Change.read_from_disk(change_dir)
-                changes.append(as_non_null_dict(change))
-        meta['changes'] = changes
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        action_root = root / self.dirname
-        action_root.mkdir(parents=True, exist_ok=True)
-
-        meta = as_non_null_dict(self)
-
-        changes = []
-        for change in self.changes:
-            change.write_to_disk(action_root / 'changes')
-            changes.append(change.dirname)
-        meta['changes'] = changes
-
-        write_meta_file(action_root, meta)
 
 
 def write_meta_file(root, meta_document):
