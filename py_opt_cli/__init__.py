@@ -11,6 +11,64 @@ import pprint
 
 META_FILE = '.meta.yaml'
 
+READ_ONLY = 'read_only'
+def modifiable(field, value):
+    return not field.metadata.get(READ_ONLY, False) and value is not None
+
+
+@attr.s
+class LazyCollection():
+    optimizely = attr.ib()
+    cls = attr.ib()
+    endpoint = attr.ib()
+    params = attr.ib(default=None)
+    _items = attr.ib(default=None, init=False)
+
+    def items(self):
+        if self._items is None:
+            self._items = {}
+            params={
+                'per_page': 100,
+            }
+            if self.params is not None:
+                params.update(self.params)
+            response = self.optimizely.session.get(
+                'https://api.optimizely.com/v2/{}'.format(self.endpoint),
+                params=params,
+            )
+
+            for doc in response.json():
+                obj = self.cls(**doc)
+                self._items[obj.id] = obj
+        return self._items.items()
+
+    def values(self):
+        for _, value in self.items():
+            yield value
+
+    def __iter__(self):
+        for key, _ in self.items():
+            yield key
+
+    def __getitem__(self, key):
+        if self._items is not None and key in self._items:
+            return self._items[key]
+
+        response = self.optimizely.session.get(
+            'https://api.optimizely.com/v2/{}/{}'.format(self.endpoint, key),
+        )
+        self.optimizely.raise_for_status(response)
+        return self.cls(**response.json())
+
+    def __setitem__(self, key, value):
+        changes = attr.asdict(value, filter=modifiable)
+        response = self.optimizely.session.patch(
+            'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
+            json=changes,
+        )
+        self.optimizely.raise_for_status(response)
+
+
 
 class Optimizely():
     def __init__(self, token):
@@ -23,52 +81,30 @@ class Optimizely():
 
     @property
     def projects(self):
-        response = self.session.get('https://api.optimizely.com/v2/projects')
-        projects = response.json()
-        for project in projects:
-            yield Project(**project)
+        return LazyCollection(self, Project, 'projects')
 
-    def experiments(self, project_id):
-        response = self.session.get(
-            'https://api.optimizely.com/v2/experiments',
-            params={
+    def experiments(self, project_id=None):
+        if project_id:
+            params = {
                 'project_id': project_id,
-                'per_page': 100,
             }
-        )
-        self.raise_for_status(response)
-        while True:
-            for experiment in response.json():
-                yield Experiment(**experiment)
-
-            if 'LINK' in response.headers:
-                print(response.headers['LINK'])
-            else:
-                return
-
-    def experiment(self, experiment_id):
-        response = self.session.get(
-            'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
-        )
-        self.raise_for_status(response)
-        return Experiment(**response.json())
-
-    def update_experiment(self, experiment_id, changes):
-        response = self.session.patch(
-            'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
-            json=changes,
-        )
-        self.raise_for_status(response)
+        else:
+            params = None
+        return LazyCollection(self, Experiment, 'experiments', params)
 
 
 COLLECTION_CLS = 'collection_cls'
 
-def subdocuments(cls):
+def subdocuments(cls, metadata=None):
+    _metadata = {
+        COLLECTION_CLS: cls,
+    }
+    if metadata is not None:
+        _metadata.update(metadata)
+
     return attr.ib(
         convert=lambda docs: [cls(**doc) for doc in docs],
-        metadata={
-            COLLECTION_CLS: cls,
-        }
+        metadata=_metadata,
     )
 
 
@@ -117,12 +153,12 @@ class Project(OptimizelyDocument):
     sdks = attr.ib()
     status = attr.ib()
     web_snippet = attr.ib()
-    account_id = attr.ib()
-    created = attr.ib()
-    id = attr.ib()
-    is_classic = attr.ib()
-    last_modified = attr.ib()
-    socket_token = attr.ib(default=None)
+    account_id = attr.ib(metadata={READ_ONLY: True})
+    created = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib(metadata={READ_ONLY: True})
+    is_classic = attr.ib(metadata={READ_ONLY: True})
+    last_modified = attr.ib(metadata={READ_ONLY: True})
+    socket_token = attr.ib(default=None, metadata={READ_ONLY: True})
     dcp_service_id = attr.ib(default=None)
 
     @property
@@ -133,7 +169,7 @@ class Project(OptimizelyDocument):
 @attr.s
 class Change(OptimizelyDocument):
     dependencies = attr.ib()
-    id = attr.ib()
+    id = attr.ib(metadata={READ_ONLY: True})
     type = attr.ib()
     async = attr.ib(default=None)
     allow_additional_redirect = attr.ib(default=None)
@@ -141,13 +177,13 @@ class Change(OptimizelyDocument):
     config = attr.ib(default=None)
     css = attr.ib(default=None)
     destination = attr.ib(default=None)
-    extension_id = attr.ib(default=None)
+    extension_id = attr.ib(default=None, metadata={READ_ONLY: True})
     name = attr.ib(default=None)
     operator = attr.ib(default=None)
     preserve_parameters = attr.ib(default=None)
     rearrange = attr.ib(default=None)
     selector = attr.ib(default=None)
-    src = attr.ib(default=None)
+    src = attr.ib(default=None, metadata={READ_ONLY: True})
     value = attr.ib(default=None)
 
     @property
@@ -208,7 +244,7 @@ class Variation(OptimizelyDocument):
     weight = attr.ib()
     actions = subdocuments(Action)
     archived = attr.ib()
-    variation_id = attr.ib()
+    variation_id = attr.ib(metadata={READ_ONLY: True})
     key = attr.ib(default=None)
     name = attr.ib(default=None)
 
@@ -219,25 +255,25 @@ class Variation(OptimizelyDocument):
 
 @attr.s
 class Experiment(OptimizelyDocument):
-    project_id = attr.ib()
-    variations = subdocuments(Variation)
     changes = subdocuments(Change)
+    created = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib(metadata={READ_ONLY: True})
+    is_classic = attr.ib(metadata={READ_ONLY: True})
+    last_modified = attr.ib(metadata={READ_ONLY: True})
     metrics = attr.ib()
+    project_id = attr.ib()
+    status = attr.ib(metadata={READ_ONLY: True})
     type = attr.ib()
-    created = attr.ib()
-    id = attr.ib()
-    is_classic = attr.ib()
-    last_modified = attr.ib()
-    status = attr.ib()
+    variations = subdocuments(Variation)
     audience_conditions = attr.ib(default=None)
-    earliest = attr.ib(default=None)
-    latest = attr.ib(default=None)
-    schedule = attr.ib(default=None)
-    key = attr.ib(default=None)
-    holdback = attr.ib(default=None)
-    description = attr.ib(default=None)
     campaign_id = attr.ib(default=None)
+    description = attr.ib(default=None)
+    earliest = attr.ib(default=None, metadata={READ_ONLY: True})
+    holdback = attr.ib(default=None)
+    key = attr.ib(default=None)
+    latest = attr.ib(default=None, metadata={READ_ONLY: True})
     name = attr.ib(default=None)
+    schedule = attr.ib(default=None)
 
     @property
     def dirname(self):
@@ -296,11 +332,11 @@ def cli(ctx, token):
 def pull(ctx, root):
     optimizely = ctx.obj['OPTIMIZELY']
     project_root = Path(root)
-    for project in optimizely.projects:
+    for project in optimizely.projects.values():
         project.write_to_disk(project_root)
 
         experiment_root = project_root / project.dirname / 'experiments'
-        for experiment in optimizely.experiments(project.id):
+        for experiment in optimizely.experiments(project.id).values():
             experiment.write_to_disk(experiment_root)
 
 
@@ -311,7 +347,7 @@ def pull_experiment(ctx, experiment):
     optimizely = ctx.obj['OPTIMIZELY']
 
     local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiment(local.id)
+    remote = optimizely.experiments[local.id]
 
     remote.write_to_disk(Path(experiment).parent)
 
@@ -324,10 +360,10 @@ def push_experiment(ctx, experiment, context_lines):
     optimizely = ctx.obj['OPTIMIZELY']
 
     local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiment(local.id)
+    remote = optimizely.experiments()[local.id]
 
-    remote_doc = filter_modifiable_experiment_keys(as_non_null_dict(remote))
-    local_doc = filter_modifiable_experiment_keys(as_non_null_dict(local))
+    remote_doc = attr.asdict(remote, filter=modifiable)
+    local_doc = attr.asdict(local, filter=modifiable)
 
     if local_doc == remote_doc:
         click.secho("No changes!", fg='green')
@@ -349,7 +385,7 @@ def push_experiment(ctx, experiment, context_lines):
                 click.secho(diffline, fg='yellow')
 
         if click.confirm('Push these experiment changes?'):
-            optimizely.update_experiment(local.id, local_doc)
+            optimizely.experiments()[local.id] = local
 
 
 if __name__ == '__main__':
