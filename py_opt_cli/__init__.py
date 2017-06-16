@@ -61,8 +61,56 @@ class Optimizely():
         self.raise_for_status(response)
 
 
+COLLECTION_CLS = 'collection_cls'
+
+def subdocuments(cls):
+    return attr.ib(
+        convert=lambda docs: [cls(**doc) for doc in docs],
+        metadata={
+            COLLECTION_CLS: cls,
+        }
+    )
+
+
+class OptimizelyDocument():
+    @classmethod
+    def read_from_disk(cls, root):
+        meta = read_meta_file(root)
+
+        for field in attr.fields(cls):
+            if COLLECTION_CLS in field.metadata:
+                docs = []
+                subdir = root / field.name
+                if subdir.exists():
+                    for dirname in meta.get(field.name):
+                        docdir = subdir / dirname
+                        if not docdir.is_dir():
+                            continue
+                        change = field.metadata[COLLECTION_CLS].read_from_disk(docdir)
+                        docs.append(as_non_null_dict(change))
+                meta[field.name] = docs
+
+        return cls(**meta)
+
+    def write_to_disk(self, root):
+        docroot = root / self.dirname
+        docroot.mkdir(parents=True, exist_ok=True)
+
+        meta = as_non_null_dict(self)
+
+        for field in attr.fields(self.__class__):
+            if COLLECTION_CLS in field.metadata:
+                objs = []
+                for obj in getattr(self, field.name):
+                    obj.write_to_disk(docroot / field.name)
+                    objs.append(obj.dirname)
+                meta[field.name] = objs
+
+        write_meta_file(docroot, meta)
+
+
 @attr.s
-class Project():
+class Project(OptimizelyDocument):
     name = attr.ib()
     confidence_threshold = attr.ib()
     platform = attr.ib()
@@ -81,25 +129,9 @@ class Project():
     def dirname(self):
         return slugify("{} {}".format(self.name, self.id))
 
-    @classmethod
-    def read_from_disk(cls, project_dir):
-        meta = read_meta_file(project_dir)
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        project_root = root / self.dirname
-        project_root.mkdir(parents=True, exist_ok=True)
-
-        write_meta_file(project_root, as_non_null_dict(self))
-
-
-def subdocuments(cls):
-    return attr.ib(convert=lambda docs: [cls(**doc) for doc in docs])
-
 
 @attr.s
-class Change():
+class Change(OptimizelyDocument):
     dependencies = attr.ib()
     id = attr.ib()
     type = attr.ib()
@@ -161,7 +193,7 @@ class Change():
 
 
 @attr.s
-class Action():
+class Action(OptimizelyDocument):
     changes = subdocuments(Change)
     page_id = attr.ib()
 
@@ -169,40 +201,10 @@ class Action():
     def dirname(self):
         return slugify(str(self.page_id))
 
-    @classmethod
-    def read_from_disk(cls, action_dir):
-        meta = read_meta_file(action_dir)
-
-        changes = []
-        changes_dir = action_dir / 'changes'
-        if changes_dir.exists():
-            for dirname in meta.get('changes'):
-                change_dir = changes_dir / dirname
-                if not change_dir.is_dir():
-                    continue
-                change = Change.read_from_disk(change_dir)
-                changes.append(as_non_null_dict(change))
-        meta['changes'] = changes
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        action_root = root / self.dirname
-        action_root.mkdir(parents=True, exist_ok=True)
-
-        meta = as_non_null_dict(self)
-
-        changes = []
-        for change in self.changes:
-            change.write_to_disk(action_root / 'changes')
-            changes.append(change.dirname)
-        meta['changes'] = changes
-
-        write_meta_file(action_root, meta)
 
 
 @attr.s
-class Variation():
+class Variation(OptimizelyDocument):
     weight = attr.ib()
     actions = subdocuments(Action)
     archived = attr.ib()
@@ -214,40 +216,9 @@ class Variation():
     def dirname(self):
         return slugify("{} {}".format(self.name, self.variation_id))
 
-    @classmethod
-    def read_from_disk(cls, variation_dir):
-        meta = read_meta_file(variation_dir)
-
-        actions = []
-        actions_dir = variation_dir / 'actions'
-        if actions_dir.exists():
-            for dirname in meta['actions']:
-                action_dir = actions_dir / dirname
-                if not action_dir.is_dir():
-                    continue
-                action = Action.read_from_disk(action_dir)
-                actions.append(as_non_null_dict(action))
-        meta['actions'] = actions
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        variation_root = root / self.dirname
-        variation_root.mkdir(parents=True, exist_ok=True)
-
-        meta = as_non_null_dict(self)
-
-        actions = []
-        for action in self.actions:
-            action.write_to_disk(variation_root / 'actions')
-            actions.append(action.dirname)
-        meta['actions'] = actions
-
-        write_meta_file(variation_root, meta)
-
 
 @attr.s
-class Experiment():
+class Experiment(OptimizelyDocument):
     project_id = attr.ib()
     variations = subdocuments(Variation)
     changes = subdocuments(Change)
@@ -271,54 +242,6 @@ class Experiment():
     @property
     def dirname(self):
         return slugify("{} {}".format(self.name, self.id))
-
-    @classmethod
-    def read_from_disk(cls, experiment_dir):
-        meta = read_meta_file(experiment_dir)
-
-        changes = []
-        changes_dir = experiment_dir / 'changes'
-        if changes_dir.exists():
-            for dirname in meta['changes']:
-                change_dir = changes_dir / dirname
-                if not change_dir.is_dir():
-                    continue
-                change = Change.read_from_disk(change_dir)
-                changes.append(as_non_null_dict(change))
-        meta['changes'] = changes
-
-        variations = []
-        variations_dir = experiment_dir / 'variations'
-        if variations_dir.exists():
-            for dirname in meta['variations']:
-                variation_dir = variations_dir / dirname
-                if not variation_dir.is_dir():
-                    continue
-                variation = Variation.read_from_disk(variation_dir)
-                variations.append(as_non_null_dict(variation))
-        meta['variations'] = variations
-
-        return cls(**meta)
-
-    def write_to_disk(self, root):
-        experiment_root = root / self.dirname
-        experiment_root.mkdir(parents=True, exist_ok=True)
-
-        meta = as_non_null_dict(self)
-
-        changes = []
-        for change in self.changes:
-            change.write_to_disk(experiment_root / 'changes')
-            changes.append(change.dirname)
-        meta['changes'] = changes
-
-        variations = []
-        for variation in self.variations:
-            variation.write_to_disk(experiment_root / 'variations')
-            variations.append(variation.dirname)
-        meta['variations'] = variations
-
-        write_meta_file(experiment_root, meta)
 
 
 def write_meta_file(root, meta_document):
