@@ -4,6 +4,6 @@ docker run \
       -it \
       -e OPTIMIZELY_TOKEN \
       -e LOCAL_USER_ID=$(id -u) \
-      -v $PWD:/workspace \
+      -v $PWD:/src \
       mulby/py-opt-cli:snapshot \
       /usr/local/bin/py-opt-cli "$@"
