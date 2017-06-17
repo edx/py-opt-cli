@@ -63,7 +63,7 @@ class LazyCollection():
     def __setitem__(self, key, value):
         changes = attr.asdict(value, filter=modifiable)
         response = self.optimizely.session.patch(
-            'https://api.optimizely.com/v2/experiments/{}'.format(experiment_id),
+            'https://api.optimizely.com/v2/{}/{}'.format(self.endpoint, key),
             json=changes,
         )
         self.optimizely.raise_for_status(response)
