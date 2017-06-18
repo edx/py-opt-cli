@@ -155,7 +155,7 @@ class Project(OptimizelyDocument):
     web_snippet = attr.ib()
     account_id = attr.ib(metadata={READ_ONLY: True})
     created = attr.ib(metadata={READ_ONLY: True})
-    id = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib()
     is_classic = attr.ib(metadata={READ_ONLY: True})
     last_modified = attr.ib(metadata={READ_ONLY: True})
     socket_token = attr.ib(default=None, metadata={READ_ONLY: True})
@@ -169,7 +169,7 @@ class Project(OptimizelyDocument):
 @attr.s
 class Change(OptimizelyDocument):
     dependencies = attr.ib()
-    id = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib()
     type = attr.ib()
     async = attr.ib(default=None)
     allow_additional_redirect = attr.ib(default=None)
@@ -257,7 +257,7 @@ class Variation(OptimizelyDocument):
 class Experiment(OptimizelyDocument):
     changes = subdocuments(Change)
     created = attr.ib(metadata={READ_ONLY: True})
-    id = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib()
     is_classic = attr.ib(metadata={READ_ONLY: True})
     last_modified = attr.ib(metadata={READ_ONLY: True})
     metrics = attr.ib()
@@ -295,18 +295,6 @@ def read_meta_file(root):
 
     with meta_file.open() as meta_file_handle:
         return yaml.safe_load(meta_file_handle)
-
-
-def filter_modifiable_experiment_keys(experiment):
-    filtered = dict(experiment)
-    for key in experiment:
-        if key not in (
-            'audience_conditions', 'changes', 'description', 'holdback',
-            'key', 'metrics', 'name', 'schedule', 'variations',
-        ):
-            del filtered[key]
-
-    return filtered
 
 
 def slugify(directory):
@@ -347,7 +335,7 @@ def pull_experiment(ctx, experiment):
     optimizely = ctx.obj['OPTIMIZELY']
 
     local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiments[local.id]
+    remote = optimizely.experiments()[local.id]
 
     remote.write_to_disk(Path(experiment).parent)
 
