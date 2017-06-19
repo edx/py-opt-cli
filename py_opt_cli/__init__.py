@@ -101,6 +101,15 @@ class Optimizely():
             params = None
         return LazyCollection(self, Audience, 'audiences', params)
 
+    def pages(self, project_id=None):
+        if project_id:
+            params = {
+                'project_id': project_id,
+            }
+        else:
+            params = None
+        return LazyCollection(self, Page, 'pages', params)
+
 
 
 COLLECTION_CLS = 'collection_cls'
@@ -187,6 +196,23 @@ class Audience(OptimizelyDocument):
     created = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib()
     last_modified = attr.ib(metadata={READ_ONLY: True})
+
+
+@attr.s
+class Page(OptimizelyDocument):
+    edit_url = attr.ib()
+    name = attr.ib()
+    project_id = attr.ib(metadata={READ_ONLY: True})
+    archived = attr.ib()
+    category = attr.ib()
+    conditions = attr.ib()
+    key = attr.ib()
+    page_type = attr.ib()
+    created = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib()
+    last_modified = attr.ib(metadata={READ_ONLY: True})
+    activation_code = attr.ib(default=None)
+    activation_type = attr.ib(default=None)
 
 
 @attr.s
@@ -342,13 +368,10 @@ def pull(ctx, root):
     for project in optimizely.projects.values():
         project.write_to_disk(project_root)
 
-        experiment_root = project_root / project.dirname / 'experiments'
-        for experiment in optimizely.experiments(project.id).values():
-            experiment.write_to_disk(experiment_root)
-
-        audience_root = project_root / project.dirname / 'audiences'
-        for audience in optimizely.audiences(project.id).values():
-            audience.write_to_disk(audience_root)
+        for object_type in ('experiments', 'audiences', 'pages'):
+            obj_root = project_root / project.dirname / object_type
+            for obj in getattr(optimizely, object_type)(project.id).values():
+                obj.write_to_disk(obj_root)
 
 
 @cli.command('pull-experiment')
