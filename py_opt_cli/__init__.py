@@ -92,6 +92,16 @@ class Optimizely():
             params = None
         return LazyCollection(self, Experiment, 'experiments', params)
 
+    def audiences(self, project_id=None):
+        if project_id:
+            params = {
+                'project_id': project_id,
+            }
+        else:
+            params = None
+        return LazyCollection(self, Audience, 'audiences', params)
+
+
 
 COLLECTION_CLS = 'collection_cls'
 
@@ -163,6 +173,20 @@ class Project(OptimizelyDocument):
     last_modified = attr.ib(metadata={READ_ONLY: True})
     socket_token = attr.ib(default=None, metadata={READ_ONLY: True})
     dcp_service_id = attr.ib(default=None)
+
+
+@attr.s
+class Audience(OptimizelyDocument):
+    project_id = attr.ib(metadata={READ_ONLY: True})
+    archived = attr.ib()
+    conditions = attr.ib()
+    description = attr.ib()
+    is_classic = attr.ib(metadata={READ_ONLY: True})
+    name = attr.ib()
+    segmentation = attr.ib()
+    created = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib()
+    last_modified = attr.ib(metadata={READ_ONLY: True})
 
 
 @attr.s
@@ -321,6 +345,10 @@ def pull(ctx, root):
         experiment_root = project_root / project.dirname / 'experiments'
         for experiment in optimizely.experiments(project.id).values():
             experiment.write_to_disk(experiment_root)
+
+        audience_root = project_root / project.dirname / 'audiences'
+        for audience in optimizely.audiences(project.id).values():
+            audience.write_to_disk(audience_root)
 
 
 @cli.command('pull-experiment')
