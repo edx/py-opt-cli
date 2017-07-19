@@ -153,6 +153,8 @@ class OptimizelyDocument():
                 serializer = field.metadata[SERIALIZER](root, obj, field.name)
                 setattr(obj, field.name, serializer.read_from_disk())
 
+        return obj
+
     def write_to_disk(self, root):
         docroot = root / self.dirname
         docroot.mkdir(parents=True, exist_ok=True)
@@ -320,7 +322,7 @@ class Variation(OptimizelyDocument):
     weight = attr.ib()
     actions = subdocuments(Action)
     archived = attr.ib()
-    variation_id = attr.ib(metadata={READ_ONLY: True})
+    variation_id = attr.ib()
     key = attr.ib(default=None)
     name = attr.ib(default=None)
 
