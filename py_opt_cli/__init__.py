@@ -310,6 +310,7 @@ class Change(OptimizelyDocument):
 class Action(OptimizelyDocument):
     changes = subdocuments(Change)
     page_id = attr.ib()
+    share_link = attr.ib(default=None)
 
     @property
     def dirname(self):
@@ -323,6 +324,8 @@ class Variation(OptimizelyDocument):
     actions = subdocuments(Action)
     archived = attr.ib()
     variation_id = attr.ib()
+    status = attr.ib()
+    share_link = attr.ib(default=None)
     key = attr.ib(default=None)
     name = attr.ib(default=None)
 
@@ -343,6 +346,9 @@ class Experiment(OptimizelyDocument):
     status = attr.ib(metadata={READ_ONLY: True})
     type = attr.ib()
     variations = subdocuments(Variation)
+    allocation_policy = attr.ib()
+    page_ids = attr.ib()
+    status = attr.ib()
     audience_conditions = attr.ib(default=None, metadata={SERIALIZER: ConditionSerializer})
     campaign_id = attr.ib(default=None)
     description = attr.ib(default=None)
