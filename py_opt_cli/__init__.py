@@ -1,13 +1,16 @@
 import requests
 from requests.exceptions import HTTPError
+from requests.utils import parse_header_links
 import attr
 import yaml
 import click
-import os
 from pathlib import Path
 import difflib
-import pprint
 import json
+import logging
+
+
+LOG = logging.getLogger(__name__)
 
 
 META_FILE = '.meta.yaml'
@@ -28,8 +31,9 @@ class LazyCollection():
 
     def items(self):
         if self._items is None:
+            doc_type = self.endpoint.rstrip('s')
             self._items = {}
-            params={
+            params = {
                 'per_page': 100,
             }
             if self.params is not None:
@@ -38,10 +42,39 @@ class LazyCollection():
                 'https://api.optimizely.com/v2/{}'.format(self.endpoint),
                 params=params,
             )
+            while True:
+                response.raise_for_status()
 
-            for doc in response.json():
-                obj = self.cls(**doc)
-                self._items[obj.id] = obj
+                for doc in response.json():
+                    doc_name = doc.get('name', '')
+                    doc_id = doc.get('id', '')
+                    LOG.debug(f'Parsing {doc_type}: {doc_name} ({doc_id})')
+                    try:
+                        obj = self.cls(**doc)
+                    except TypeError:
+                        LOG.exception(
+                            'Error fetching %s %s (%s) from Optimizely:\n%s',
+                            doc_type,
+                            doc_name,
+                            str(doc_id),
+                            json.dumps(doc, indent=2)
+                        )
+                    else:
+                        self._items[obj.id] = obj
+
+                link_header = response.headers.get('link')
+                next_url = None
+                if link_header is not None:
+                    for link in parse_header_links(link_header):
+                        if link['rel'] in ('next', 'last'):
+                            next_url = link['url']
+                            break
+
+                if next_url is not None:
+                    response = self.optimizely.session.get(next_url)
+                else:
+                    break
+
         return self._items.items()
 
     def values(self):
@@ -112,8 +145,8 @@ class Optimizely():
         return LazyCollection(self, Page, 'pages', params)
 
 
-
 COLLECTION_CLS = 'collection_cls'
+
 
 def subdocuments(cls, metadata=None):
     _metadata = {
@@ -128,7 +161,8 @@ def subdocuments(cls, metadata=None):
     )
 
 
-class OptimizelyDocument():
+class OptimizelyDocument(object):
+
     @classmethod
     def read_from_disk(cls, root):
         meta = read_meta_file(root)
@@ -192,17 +226,25 @@ class ConditionSerializer():
 
     def read_from_disk(self):
         with self.filename.open() as field_file:
-            return json.dumps(json.load(field_file))
+            try:
+                return json.dumps(json.load(field_file))
+            except json.JSONDecodeError:
+                # the value can be simply "everyone" or a JSON blob
+                return field_file.read()
 
     def write_to_disk(self):
         data = getattr(self.obj, self.fieldname)
         if data is not None:
             with self.filename.open('w') as field_file:
-                json.dump(
-                    json.loads(data),
-                    fp=field_file,
-                    indent=2,
-                )
+                try:
+                    json.dump(
+                        json.loads(data),
+                        fp=field_file,
+                        indent=2,
+                    )
+                except json.JSONDecodeError:
+                    # the value can be simply "everyone" or a JSON blob
+                    field_file.write(data)
 
 
 @attr.s
@@ -273,12 +315,12 @@ class Page(OptimizelyDocument):
     category = attr.ib()
     conditions = attr.ib(metadata={SERIALIZER: ConditionSerializer})
     key = attr.ib()
-    page_type = attr.ib()
     created = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib()
     last_modified = attr.ib(metadata={READ_ONLY: True})
     activation_code = attr.ib(default=None)
     activation_type = attr.ib(default=None)
+    page_type = attr.ib(default=None)
 
 
 @attr.s
@@ -386,8 +428,13 @@ def as_non_null_dict(obj):
 
 @click.group()
 @click.password_option('--token', envvar='OPTIMIZELY_TOKEN')
+@click.option('--verbose', default=False, is_flag=True)
 @click.pass_context
-def cli(ctx, token):
+def cli(ctx, token, verbose):
+    log_level = logging.DEBUG if verbose else logging.INFO
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=log_level, format=log_format)
+
     if ctx.obj is None:
         ctx.obj = {}
 
@@ -400,6 +447,7 @@ def pull(ctx, root):
     optimizely = ctx.obj['OPTIMIZELY']
     project_root = Path(root)
     for project in optimizely.projects.values():
+        LOG.debug(f'Processing project: {project.name} ({project.id})')
         project.write_to_disk(project_root)
 
         for object_type in ('experiments', 'audiences', 'pages'):
