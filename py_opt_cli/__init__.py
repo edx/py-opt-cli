@@ -215,7 +215,7 @@ class OptimizelyDocument(object):
 
 
 @attr.s
-class ConditionSerializer():
+class ConditionSerializer(object):
     root = attr.ib()
     obj = attr.ib()
     fieldname = attr.ib()
@@ -248,20 +248,25 @@ class ConditionSerializer():
 
 
 @attr.s
-class StaticContentSerializer():
+class StaticContentSerializer(object):
     root = attr.ib()
     obj = attr.ib()
     fieldname = attr.ib()
 
     @property
     def filename(self):
-        if self.obj.type == 'custom_css':
-            extension = 'css'
-        elif self.obj.type == 'custom_code':
-            extension = 'js'
-        elif self.obj.type in ('insert_html', 'insert_image'):
-            extension = 'html'
+        extension = None
+        if hasattr(self.obj, 'type'):
+            if self.obj.type == 'custom_css':
+                extension = 'css'
+            elif self.obj.type == 'custom_code':
+                extension = 'js'
+            elif self.obj.type in ('insert_html', 'insert_image'):
+                extension = 'html'
         else:
+            if self.fieldname == 'activation_code':
+                extension = 'js'
+        if extension is None:
             extension = 'txt'
         return self.root / '{}.{}'.format(self.fieldname, extension)
 
@@ -313,12 +318,12 @@ class Page(OptimizelyDocument):
     project_id = attr.ib(metadata={READ_ONLY: True})
     archived = attr.ib()
     category = attr.ib()
-    conditions = attr.ib(metadata={SERIALIZER: ConditionSerializer})
     key = attr.ib()
     created = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib()
     last_modified = attr.ib(metadata={READ_ONLY: True})
-    activation_code = attr.ib(default=None)
+    conditions = attr.ib(default=None, metadata={SERIALIZER: ConditionSerializer})
+    activation_code = attr.ib(default=None, metadata={SERIALIZER: StaticContentSerializer})
     activation_type = attr.ib(default=None)
     page_type = attr.ib(default=None)
 
@@ -460,12 +465,16 @@ def pull(ctx, root):
 @click.argument('experiment', type=click.Path(exists=True, file_okay=False))
 @click.pass_context
 def pull_experiment(ctx, experiment):
+    return pull_object(ctx, experiment, Experiment, 'experiments')
+
+
+def pull_object(ctx, path, object_class, collection_name):
     optimizely = ctx.obj['OPTIMIZELY']
 
-    local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiments()[local.id]
+    local = object_class.read_from_disk(Path(path))
+    remote = getattr(optimizely, collection_name)()[local.id]
 
-    remote.write_to_disk(Path(experiment).parent)
+    remote.write_to_disk(Path(path).parent)
 
 
 @cli.command('push-experiment')
@@ -473,10 +482,14 @@ def pull_experiment(ctx, experiment):
 @click.option('--context-lines', '-n', type=int, default=3)
 @click.pass_context
 def push_experiment(ctx, experiment, context_lines):
+    return push_object(ctx, experiment, Experiment, 'experiments', context_lines)
+
+
+def push_object(ctx, path, object_class, collection_name, context_lines):
     optimizely = ctx.obj['OPTIMIZELY']
 
-    local = Experiment.read_from_disk(Path(experiment))
-    remote = optimizely.experiments()[local.id]
+    local = object_class.read_from_disk(Path(path))
+    remote = getattr(optimizely, collection_name)()[local.id]
 
     remote_doc = attr.asdict(remote, filter=modifiable)
     local_doc = attr.asdict(local, filter=modifiable)
@@ -500,8 +513,23 @@ def push_experiment(ctx, experiment, context_lines):
             elif diffline.startswith('?'):
                 click.secho(diffline, fg='yellow')
 
-        if click.confirm('Push these experiment changes?'):
-            optimizely.experiments()[local.id] = local
+        if click.confirm('Push these changes?'):
+            getattr(optimizely, collection_name)()[local.id] = local
+
+
+@cli.command('pull-page')
+@click.argument('page', type=click.Path(exists=True, file_okay=False))
+@click.pass_context
+def pull_page(ctx, page):
+    return pull_object(ctx, page, Page, 'pages')
+
+
+@cli.command('push-page')
+@click.argument('page', type=click.Path(exists=True, file_okay=False))
+@click.option('--context-lines', '-n', type=int, default=3)
+@click.pass_context
+def push_page(ctx, page, context_lines):
+    return push_object(ctx, page, Page, 'pages', context_lines)
 
 
 if __name__ == '__main__':
