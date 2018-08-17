@@ -113,7 +113,6 @@ class Optimizely():
         if not response.ok:
             raise HTTPError(response.json().get('message', response.reason), response=response)
 
-    @property
     def projects(self):
         return LazyCollection(self, Project, 'projects')
 
@@ -161,6 +160,22 @@ def subdocuments(cls, metadata=None):
     )
 
 
+SUBDOCUMENT_CLS = 'subdocument_cls'
+
+
+def subdocument(cls, metadata=None):
+    _metadata = {
+        SUBDOCUMENT_CLS: cls,
+    }
+    if metadata is not None:
+        _metadata.update(metadata)
+
+    return attr.ib(
+        convert=lambda doc: cls(**doc),
+        metadata=_metadata,
+    )
+
+
 class OptimizelyDocument(object):
 
     @classmethod
@@ -179,6 +194,11 @@ class OptimizelyDocument(object):
                         change = field.metadata[COLLECTION_CLS].read_from_disk(docdir)
                         docs.append(as_non_null_dict(change))
                 meta[field.name] = docs
+            elif SUBDOCUMENT_CLS in field.metadata:
+                subdir = root / field.name
+                if subdir.is_dir():
+                    obj = field.metadata[SUBDOCUMENT_CLS].read_from_disk(subdir)
+                    meta[field.name] = as_non_null_dict(obj)
 
         obj = cls(**meta)
 
@@ -190,7 +210,10 @@ class OptimizelyDocument(object):
         return obj
 
     def write_to_disk(self, root):
-        docroot = root / self.dirname
+        if self.dirname is not None:
+            docroot = root / self.dirname
+        else:
+            docroot = root
         docroot.mkdir(parents=True, exist_ok=True)
 
         meta = as_non_null_dict(self)
@@ -202,6 +225,10 @@ class OptimizelyDocument(object):
                     obj.write_to_disk(docroot / field.name)
                     objs.append(obj.dirname)
                 meta[field.name] = objs
+            elif SUBDOCUMENT_CLS in field.metadata:
+                obj = getattr(self, field.name)
+                obj.write_to_disk(docroot / field.name)
+                meta.pop(field.name, None)
             elif SERIALIZER in field.metadata:
                 serializer = field.metadata[SERIALIZER](docroot, self, field.name)
                 serializer.write_to_disk()
@@ -264,7 +291,7 @@ class StaticContentSerializer(object):
             elif self.obj.type in ('insert_html', 'insert_image'):
                 extension = 'html'
         else:
-            if self.fieldname == 'activation_code':
+            if self.fieldname in ('activation_code', 'project_javascript'):
                 extension = 'js'
         if extension is None:
             extension = 'txt'
@@ -280,6 +307,25 @@ class StaticContentSerializer(object):
             with self.filename.open('w') as field_file:
                 field_file.write(data)
 
+
+
+@attr.s
+class WebSnippet(OptimizelyDocument):
+    code_revision = attr.ib(metadata={READ_ONLY: True})
+    enable_force_variation = attr.ib()
+    exclude_disabled_experiments = attr.ib()
+    exclude_names = attr.ib()
+    include_jquery = attr.ib()
+    ip_anonymization = attr.ib()
+    js_file_size = attr.ib(metadata={READ_ONLY: True})
+    library = attr.ib()
+    ip_filter = attr.ib(default=None)
+    project_javascript = attr.ib(default=None, metadata={SERIALIZER: StaticContentSerializer})
+
+    @property
+    def dirname(self):
+        return None
+
 @attr.s
 class Project(OptimizelyDocument):
     name = attr.ib()
@@ -287,12 +333,12 @@ class Project(OptimizelyDocument):
     platform = attr.ib()
     sdks = attr.ib()
     status = attr.ib(metadata={READ_ONLY: True})
-    web_snippet = attr.ib()
     account_id = attr.ib(metadata={READ_ONLY: True})
     created = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib()
     is_classic = attr.ib(metadata={READ_ONLY: True})
     last_modified = attr.ib(metadata={READ_ONLY: True})
+    web_snippet = subdocument(WebSnippet)
     socket_token = attr.ib(default=None, metadata={READ_ONLY: True})
     dcp_service_id = attr.ib(default=None)
 
@@ -404,6 +450,7 @@ class Experiment(OptimizelyDocument):
     latest = attr.ib(default=None, metadata={READ_ONLY: True})
     name = attr.ib(default=None)
     schedule = attr.ib(default=None)
+    url_targeting = attr.ib(default=None)
 
 
 def write_meta_file(root, meta_document):
@@ -451,7 +498,7 @@ def cli(ctx, token, verbose):
 def pull(ctx, root):
     optimizely = ctx.obj['OPTIMIZELY']
     project_root = Path(root)
-    for project in optimizely.projects.values():
+    for project in optimizely.projects().values():
         LOG.debug(f'Processing project: {project.name} ({project.id})')
         project.write_to_disk(project_root)
 
@@ -530,6 +577,21 @@ def pull_page(ctx, page):
 @click.pass_context
 def push_page(ctx, page, context_lines):
     return push_object(ctx, page, Page, 'pages', context_lines)
+
+
+@cli.command('pull-project')
+@click.argument('project', type=click.Path(exists=True, file_okay=False))
+@click.pass_context
+def pull_project(ctx, project):
+    return pull_object(ctx, project, Project, 'projects')
+
+
+@cli.command('push-project')
+@click.argument('project', type=click.Path(exists=True, file_okay=False))
+@click.option('--context-lines', '-n', type=int, default=3)
+@click.pass_context
+def push_page(ctx, project, context_lines):
+    return push_object(ctx, project, Project, 'projects', context_lines)
 
 
 if __name__ == '__main__':
