@@ -145,6 +145,16 @@ class Optimizely():
             params = None
         return LazyCollection(self, Page, 'pages', params)
 
+    def events(self, project_id=None):
+        if project_id:
+            params = {
+                'project_id': project_id,
+                'include_classic': 'true',
+            }
+        else:
+            params = None
+        return LazyCollection(self, Event, 'events', params)
+
 
 COLLECTION_CLS = 'collection_cls'
 
@@ -377,6 +387,23 @@ class Page(OptimizelyDocument):
 
 
 @attr.s
+class Event(OptimizelyDocument):
+    archived = attr.ib()
+    category = attr.ib()
+    config = attr.ib()
+    description = attr.ib()
+    event_type = attr.ib()
+    key = attr.ib()
+    name = attr.ib()
+    page_id = attr.ib()
+    project_id = attr.ib(metadata={READ_ONLY: True})
+    created = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib(metadata={READ_ONLY: True})
+    is_classic = attr.ib(metadata={READ_ONLY: True})
+    is_editable = attr.ib(metadata={READ_ONLY: True})
+
+
+@attr.s
 class Change(OptimizelyDocument):
     dependencies = attr.ib()
     id = attr.ib()
@@ -505,7 +532,7 @@ def pull(ctx, root):
         LOG.debug(f'Processing project: {project.name} ({project.id})')
         project.write_to_disk(project_root)
 
-        for object_type in ('experiments', 'audiences', 'pages'):
+        for object_type in ('experiments', 'audiences', 'pages', 'events'):
             obj_root = project_root / project.dirname / object_type
             for obj in getattr(optimizely, object_type)(project.id).values():
                 obj.write_to_disk(obj_root)
