@@ -17,6 +17,8 @@ META_FILE = '.meta.yaml'
 SERIALIZER = 'serializer'
 
 READ_ONLY = 'read_only'
+
+
 def modifiable(field, value):
     return not field.metadata.get(READ_ONLY, False) and value is not None
 
@@ -308,7 +310,6 @@ class StaticContentSerializer(object):
                 field_file.write(data)
 
 
-
 @attr.s
 class WebSnippet(OptimizelyDocument):
     code_revision = attr.ib(metadata={READ_ONLY: True})
@@ -325,6 +326,7 @@ class WebSnippet(OptimizelyDocument):
     @property
     def dirname(self):
         return None
+
 
 @attr.s
 class Project(OptimizelyDocument):
@@ -410,7 +412,6 @@ class Action(OptimizelyDocument):
         return slugify(str(self.page_id))
 
 
-
 @attr.s
 class Variation(OptimizelyDocument):
     weight = attr.ib()
@@ -463,6 +464,7 @@ def write_meta_file(root, meta_document):
             default_flow_style=False,
         )
 
+
 def read_meta_file(root):
     meta_file = root / META_FILE
 
@@ -491,6 +493,7 @@ def cli(ctx, token, verbose):
         ctx.obj = {}
 
     ctx.obj['OPTIMIZELY'] = Optimizely(token)
+
 
 @cli.command()
 @click.option('--root', default='.', type=click.Path(exists=True, file_okay=False))
