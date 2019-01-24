@@ -390,17 +390,17 @@ class Page(OptimizelyDocument):
 class Event(OptimizelyDocument):
     archived = attr.ib()
     category = attr.ib()
-    config = attr.ib()
-    description = attr.ib()
     event_type = attr.ib()
-    key = attr.ib()
     name = attr.ib()
-    page_id = attr.ib()
     project_id = attr.ib(metadata={READ_ONLY: True})
     created = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib(metadata={READ_ONLY: True})
     is_classic = attr.ib(metadata={READ_ONLY: True})
-    is_editable = attr.ib(metadata={READ_ONLY: True})
+    config = attr.ib(default=None)
+    description = attr.ib(default=None)
+    is_editable = attr.ib(metadata={READ_ONLY: True}, default=None)
+    key = attr.ib(default=None)
+    page_id = attr.ib(default=None)
 
 
 @attr.s
