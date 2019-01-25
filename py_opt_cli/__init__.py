@@ -17,6 +17,8 @@ META_FILE = '.meta.yaml'
 SERIALIZER = 'serializer'
 
 READ_ONLY = 'read_only'
+
+
 def modifiable(field, value):
     return not field.metadata.get(READ_ONLY, False) and value is not None
 
@@ -142,6 +144,16 @@ class Optimizely():
         else:
             params = None
         return LazyCollection(self, Page, 'pages', params)
+
+    def events(self, project_id=None):
+        if project_id:
+            params = {
+                'project_id': project_id,
+                'include_classic': 'true',
+            }
+        else:
+            params = None
+        return LazyCollection(self, Event, 'events', params)
 
 
 COLLECTION_CLS = 'collection_cls'
@@ -308,7 +320,6 @@ class StaticContentSerializer(object):
                 field_file.write(data)
 
 
-
 @attr.s
 class WebSnippet(OptimizelyDocument):
     code_revision = attr.ib(metadata={READ_ONLY: True})
@@ -325,6 +336,7 @@ class WebSnippet(OptimizelyDocument):
     @property
     def dirname(self):
         return None
+
 
 @attr.s
 class Project(OptimizelyDocument):
@@ -375,6 +387,23 @@ class Page(OptimizelyDocument):
 
 
 @attr.s
+class Event(OptimizelyDocument):
+    archived = attr.ib()
+    category = attr.ib()
+    event_type = attr.ib()
+    name = attr.ib()
+    project_id = attr.ib(metadata={READ_ONLY: True})
+    created = attr.ib(metadata={READ_ONLY: True})
+    id = attr.ib(metadata={READ_ONLY: True})
+    is_classic = attr.ib(metadata={READ_ONLY: True})
+    config = attr.ib(default=None)
+    description = attr.ib(default=None)
+    is_editable = attr.ib(metadata={READ_ONLY: True}, default=None)
+    key = attr.ib(default=None)
+    page_id = attr.ib(default=None)
+
+
+@attr.s
 class Change(OptimizelyDocument):
     dependencies = attr.ib()
     id = attr.ib()
@@ -408,7 +437,6 @@ class Action(OptimizelyDocument):
     @property
     def dirname(self):
         return slugify(str(self.page_id))
-
 
 
 @attr.s
@@ -463,6 +491,7 @@ def write_meta_file(root, meta_document):
             default_flow_style=False,
         )
 
+
 def read_meta_file(root):
     meta_file = root / META_FILE
 
@@ -492,6 +521,7 @@ def cli(ctx, token, verbose):
 
     ctx.obj['OPTIMIZELY'] = Optimizely(token)
 
+
 @cli.command()
 @click.option('--root', default='.', type=click.Path(exists=True, file_okay=False))
 @click.pass_context
@@ -502,7 +532,7 @@ def pull(ctx, root):
         LOG.debug(f'Processing project: {project.name} ({project.id})')
         project.write_to_disk(project_root)
 
-        for object_type in ('experiments', 'audiences', 'pages'):
+        for object_type in ('experiments', 'audiences', 'pages', 'events'):
             obj_root = project_root / project.dirname / object_type
             for obj in getattr(optimizely, object_type)(project.id).values():
                 obj.write_to_disk(obj_root)
