@@ -36,7 +36,7 @@ class LazyCollection():
             doc_type = self.endpoint.rstrip('s')
             self._items = {}
             params = {
-                'per_page': 100,
+                'per_page': 50,
             }
             if self.params is not None:
                 params.update(self.params)
