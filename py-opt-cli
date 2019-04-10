@@ -2,6 +2,7 @@
 
 docker run \
       -it \
+      --init \
       -e OPTIMIZELY_TOKEN \
       -e LOCAL_USER_ID=$(id -u) \
       -v $PWD:/src \
