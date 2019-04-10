@@ -12,4 +12,4 @@ useradd --shell /bin/bash -u $USER_ID -o -c "" -m developer
 echo "developer ALL=(root) NOPASSWD:ALL" >> /etc/sudoers
 export HOME=/home/developer
 
-exec /usr/local/bin/gosu developer "$@"
+exec gosu developer "$@"
