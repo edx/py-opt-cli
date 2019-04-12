@@ -11,7 +11,7 @@ help: ## Display this help message
 	@perl -nle'print $& if m{^[\.a-zA-Z_-]+:.*?## .*$$}' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m  %-25s\033[0m %s\n", $$1, $$2}'
 
 build: ## Build a new version of the docker container
-	docker build -t $(IMAGE) .
+	docker build --no-cache -t $(IMAGE) .
 
 update-requirements: ## Update the requirements.txt file to include the latest versions of each package
 	docker run \
