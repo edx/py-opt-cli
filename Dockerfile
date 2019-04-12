@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 	PYTHONUNBUFFERED=1
 
 # Install system packages from apt
-RUN apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates gosu
+RUN apt-get update -qq && apt-get install -y --no-install-recommends ca-certificates gosu git
 
 # Update pip and install SSL certs
 RUN pip3 install -U pip certifi
