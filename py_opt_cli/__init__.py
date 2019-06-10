@@ -394,6 +394,7 @@ class Event(OptimizelyDocument):
     name = attr.ib()
     project_id = attr.ib(metadata={READ_ONLY: True})
     created = attr.ib(metadata={READ_ONLY: True})
+    last_modified = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib(metadata={READ_ONLY: True})
     is_classic = attr.ib(metadata={READ_ONLY: True})
     config = attr.ib(default=None)
