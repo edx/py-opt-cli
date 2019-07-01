@@ -394,7 +394,6 @@ class Event(OptimizelyDocument):
     name = attr.ib()
     project_id = attr.ib(metadata={READ_ONLY: True})
     created = attr.ib(metadata={READ_ONLY: True})
-    last_modified = attr.ib(metadata={READ_ONLY: True})
     id = attr.ib(metadata={READ_ONLY: True})
     is_classic = attr.ib(metadata={READ_ONLY: True})
     config = attr.ib(default=None)
@@ -402,6 +401,7 @@ class Event(OptimizelyDocument):
     is_editable = attr.ib(metadata={READ_ONLY: True}, default=None)
     key = attr.ib(default=None)
     page_id = attr.ib(default=None)
+    last_modified = attr.ib(metadata={READ_ONLY: True}, default=None)
 
 
 @attr.s
