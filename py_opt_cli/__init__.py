@@ -415,6 +415,7 @@ class Change(OptimizelyDocument):
     config = attr.ib(default=None)
     css = attr.ib(default=None)
     destination = attr.ib(default=None)
+    destination_function = attr.ib(default=None)
     extension_id = attr.ib(default=None, metadata={READ_ONLY: True})
     name = attr.ib(default=None)
     operator = attr.ib(default=None)
