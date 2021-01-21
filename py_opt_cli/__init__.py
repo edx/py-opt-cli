@@ -409,7 +409,7 @@ class Change(OptimizelyDocument):
     dependencies = attr.ib()
     id = attr.ib()
     type = attr.ib()
-    async = attr.ib(default=None)
+    # async = attr.ib(default=None)
     allow_additional_redirect = attr.ib(default=None)
     attributes = attr.ib(default=None)
     config = attr.ib(default=None)
