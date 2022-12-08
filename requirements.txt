@@ -5,10 +5,18 @@
 #    pip-compile --upgrade
 #
 attrs==19.1.0
-certifi==2019.3.9         # via requests
-chardet==3.0.4            # via requests
+    # via -r requirements.in
+certifi==2022.12.7
+    # via requests
+chardet==3.0.4
+    # via requests
 click==7.0
-idna==2.8                 # via requests
+    # via -r requirements.in
+idna==2.8
+    # via requests
 pyyaml==5.1
+    # via -r requirements.in
 requests==2.21.0
-urllib3==1.24.1           # via requests
+    # via -r requirements.in
+urllib3==1.24.1
+    # via requests
