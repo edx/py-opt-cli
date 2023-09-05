@@ -1,0 +1,3 @@
+[console_scripts]
+py-opt-cli = py_opt_cli:cli
+
